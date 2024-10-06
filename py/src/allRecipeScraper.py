@@ -3,13 +3,10 @@ import re as regex
 import pandas as pd
 from bs4 import BeautifulSoup
 
-class RobotsParsingState:
-    PRE_APPLICABLE = 0
-    STARTED = 1
-    FINISHED = 2
+
 
 class DataReaderWriter:
-    FILE_NAME = "recipies.csv"
+    FILE_NAME = "recipes.csv"
     URL_KEY = "url"
     
     ## TODO abstract this so that it can be used abstractly
@@ -22,14 +19,24 @@ class DataReaderWriter:
             previousScrape: dict[str, list[str]] = {}
             
             # create a url to ingredients map 
-            for itr in  df.itertuples():
+            for label, content in  df.items():
+                row_data = []
                 
-                previousScrape[itr.index] = itr
+
+                for column in df.columns:
+                
+                    if content.get(column) == "Y":
+                        row_data.append(column)
+                    else:
+                        continue
+                    
+                previousScrape[label] = row_data
             
             
             return previousScrape
         except Exception as e:
             print("Likely no previous scrape detected")
+            print(e)
             return {}
 
         
@@ -53,7 +60,7 @@ class DataReaderWriter:
                 totalItems += 1
                 if item not in headerSet:
                     headerSet[item] = 1
-                    header_list.append(regex.sub(r"\s|,|-|'|\"|\-", "_", item))
+                    header_list.append(regex.sub(r"\W", "_", item))
         
         del headerSet
         
@@ -70,7 +77,7 @@ class DataReaderWriter:
             row_dict[self.URL_KEY] = url
             
             for ingredient in ingredient_list:
-                sanitized_ingredient = regex.sub(r"\s|,|-|'|\"|\-", "_", ingredient)
+                sanitized_ingredient = regex.sub(r"\W", "_", ingredient)
                 if sanitized_ingredient in header_list:
                     # Set the value to 'Y' for present ingredient
                     row_dict[sanitized_ingredient] = "Y"
@@ -86,6 +93,10 @@ class DataReaderWriter:
         df.to_csv(self.FILE_NAME)
         
 class SimpleWebCrawler:
+    class RobotsParsingState:
+        PRE_APPLICABLE = 0
+        STARTED = 1
+        FINISHED = 2
     
     def __init__(self, start_url):
         self.start_url = start_url
@@ -103,13 +114,13 @@ class SimpleWebCrawler:
             print(f"!\tError fetching {url}: {e}")
             return None
         
-    def setRules(self, fobidden_robots_txt_link):
+    def setRules(self, forbidden_robots_txt_link):
         
-        state = RobotsParsingState.PRE_APPLICABLE
+        state = self.RobotsParsingState.PRE_APPLICABLE
         
         # for each line after User-agent: * in the robots file, 
         # add each regex after "Disallow: " to an array of forbidden websites
-        robot_page = self.fetch_page(fobidden_robots_txt_link)
+        robot_page = self.fetch_page(forbidden_robots_txt_link)
         # print (robot_page)
         # https://docs.python.org/3/howto/regex.html
         # 
@@ -120,17 +131,15 @@ class SimpleWebCrawler:
         
         for line in lines:
             if (line == "User-agent: *"):
-                state = RobotsParsingState.STARTED
-            elif state == RobotsParsingState.STARTED:
+                state = self.RobotsParsingState.STARTED
+            elif state == self.RobotsParsingState.STARTED:
                 if "User-agent" in line:
-                    state = RobotsParsingState.FINISHED
+                    state = self.RobotsParsingState.FINISHED
                 elif line != "":
                     applicable_sites.append(line)
-            elif state == RobotsParsingState.FINISHED:
+            elif state == self.RobotsParsingState.FINISHED:
                 break
 
-        pprint(applicable_sites)
-        
         allowed_patterns = []
         disallowed_patterns = []
         for siteRegex in applicable_sites:
@@ -138,12 +147,12 @@ class SimpleWebCrawler:
             
             if "Disallow" in siteRegex:
                 filteredRegex = siteRegex.replace("Disallow: ", "")
-                comiledRegex = re.compile(filteredRegex)
-                disallowed_patterns.append(comiledRegex)
+                compiledRegex = regex.compile(filteredRegex)
+                disallowed_patterns.append(compiledRegex)
             else:
-                filteredRegex = siteRegex.replace("Disallow: ", "")
-                comiledRegex = re.compile(filteredRegex)
-                allowed_patterns.append(comiledRegex)
+                filteredRegex = siteRegex.replace("Allow: ", "")
+                compiledRegex = regex.compile(filteredRegex)
+                allowed_patterns.append(compiledRegex)
         
         self.forbidden_sites = disallowed_patterns
         return allowed_patterns, disallowed_patterns
