@@ -1,8 +1,6 @@
 import requests
 import re
 import pandas as pd
-import csv
-from pprint import pprint 
 from bs4 import BeautifulSoup
 
 class RobotsParsingState:
@@ -17,53 +15,73 @@ class DataReaderWriter:
     ## TODO abstract this so that it can be used abstractly
     # TODO I'm not quite sure how this will work if a new data point is added.
     # Might have to read into this via Pandas documentation
-    def readPreviousScrape(): list[str]
-        df = pd.read_csv(self.FILE_NAME)
+    def readPreviousScrape(self) -> dict[str, list[str]]:
+        try:
+            df = pd.read_csv(self.FILE_NAME)
+            
+            previousScrape: dict[str, list[str]] = {}
+            
+            # create a url to ingredients map 
+            for itr in  df.itertuples():
+                
+                previousScrape[itr.index] = itr
+            
+            
+            return previousScrape
+        except Exception as e:
+            print("Likely no previous scrape detected")
+            return {}
+
         
-        previousScrape = df[self.URL_KEY].tolist()
-        
-        return previousScrape
-        
-    def write(self, data: dict[str, list[str]]):
+    def writeToCsv(self, data: dict[str, list[str]]):
         
         headerSet = {self.URL_KEY: None}
-        headers = [self.URL_KEY]
-        # Info 
-        totalItems = 0
         
-        for key, dataItems in data.items():
-            for val in dataItems:
-                if val is "":
+        # The name of all the ingredients
+        header_list: list[str] = [self.URL_KEY]
+        
+        # meta Info 
+        totalItems = 0
+        if len(data) == 0:
+            return
+         
+        for _, data_row in data.items():
+            for item in data_row:
+                if item == "":
                     continue
                 
-                totalItems+=1
-                if val not in headerSet:
-                    headerSet[val] = 1
-                    headers.append(val)
+                totalItems += 1
+                if item not in headerSet:
+                    headerSet[item] = 1
+                    header_list.append(item.replace(" ", "_"))
+        
         del headerSet
         
         # this are our csv file headers
-        print(headers)
-        print(f'{len(headers)} with {totalItems} total')
+        print(header_list)
+        print(f'{len(header_list)} with {totalItems} total')
+        
         # Create a list of dictionaries, mapping each row to its header
-        rows = []
-        for url, rowData in data.items():
+        rows: list[dict[str: str]] = []
+        
+        for url, ingredient_list in data.items():
             # Initialize a dictionary, eq to the size of the headers arr, with None for all headers
-            row_dict = {header: 0 for header in headers}  
-            row_dict[self.URL_KEY] = url    
+            row_dict: dict[str, str] = {header: None for header in header_list}  
+            row_dict[self.URL_KEY] = url
             
-            for elem in rowData:
-                if elem in headers:
-                    # Set the value to '1' for present elements
-                    row_dict[elem] = 1
+            for ingredient in ingredient_list:
+                if ingredient in header_list:
+                    # Set the value to 'Y' for present ingredient
+                    row_dict[ingredient] = "Y"
                 
             rows.append(row_dict)
 
         # Create DataFrame
-        df = pd.DataFrame(rows, columns=headers)
-
+        df = pd.DataFrame(rows, columns=header_list)
+        df.set_index(self.URL_KEY, inplace=True)
         # Print the DataFrame
         print(df)
+        
         df.to_csv(self.FILE_NAME)
         
 class SimpleWebCrawler:
@@ -72,7 +90,7 @@ class SimpleWebCrawler:
         self.start_url = start_url
         self.forbidden_sites = []
         self.visited_urls = {}
-        self.recipies = {}       
+        self.recipes: dict[str, list[str]] = {}       
 
     def fetch_page(self, url):
         print(f"fetching: {url}")
@@ -144,7 +162,7 @@ class SimpleWebCrawler:
     def crawl(self, url):
         
         # So we don't visit the urls we've already visted
-        if url in self.visited_urls or url in self.recipies:
+        if url in self.visited_urls or url in self.recipes:
             return
         
         # if the site isn't part of the site we want to scrape
@@ -179,7 +197,7 @@ class SimpleWebCrawler:
         else:
             print(f"+\tfound {len(ingredientsText)}")
             # write the output to a dict where the url is the key
-            self.recipies.update({url: ingredientsText})
+            self.recipes.update({url: ingredientsText})
         
         links = self.extract_links(soup, url)
 
@@ -198,15 +216,17 @@ if __name__ == "__main__":
     robots_txt = "https://www.allrecipes.com/robots.txt"
     # robots_txt = "https://discord.com/robots.txt"
     crawler = SimpleWebCrawler(start_url)
-    writer = DataWriter()
-    pprint(crawler.setRules(robots_txt))
+    writer = DataReaderWriter()
     try:
+        crawler.recipes = writer.readPreviousScrape()
         crawler.start_crawl()
     except KeyboardInterrupt:
-        for k, v in crawler.recipies.items():
-            print(k+": ")
+        for k, v in crawler.recipes.items():
+            print(f"{k}: ")
             for itr in v:
                 print(f"{itr}, ")
             print("\n")
+    except Exception as e:
+        print(e)
     finally:
-        writer.write(crawler.recipies)
+        writer.writeToCsv(crawler.recipes)
