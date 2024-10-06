@@ -1,5 +1,5 @@
 import requests
-import re
+import re as regex
 import pandas as pd
 from bs4 import BeautifulSoup
 
@@ -44,7 +44,7 @@ class DataReaderWriter:
         totalItems = 0
         if len(data) == 0:
             return
-         
+        
         for _, data_row in data.items():
             for item in data_row:
                 if item == "":
@@ -53,7 +53,7 @@ class DataReaderWriter:
                 totalItems += 1
                 if item not in headerSet:
                     headerSet[item] = 1
-                    header_list.append(item.replace(" ", "_"))
+                    header_list.append(regex.sub(r"\s|,|-|'|\"|\-", "_", item))
         
         del headerSet
         
@@ -70,9 +70,10 @@ class DataReaderWriter:
             row_dict[self.URL_KEY] = url
             
             for ingredient in ingredient_list:
-                if ingredient in header_list:
+                sanitized_ingredient = regex.sub(r"\s|,|-|'|\"|\-", "_", ingredient)
+                if sanitized_ingredient in header_list:
                     # Set the value to 'Y' for present ingredient
-                    row_dict[ingredient] = "Y"
+                    row_dict[sanitized_ingredient] = "Y"
                 
             rows.append(row_dict)
 
@@ -161,7 +162,7 @@ class SimpleWebCrawler:
 
     def crawl(self, url):
         
-        # So we don't visit the urls we've already visted
+        # So we don't visit the urls we've already visited
         if url in self.visited_urls or url in self.recipes:
             return
         
