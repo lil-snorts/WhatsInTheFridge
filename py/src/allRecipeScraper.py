@@ -5,32 +5,31 @@ from bs4 import BeautifulSoup
 
 
 
-class DataReaderWriter:
-    FILE_NAME = "recipes.csv"
-    URL_KEY = "url"
+# Abstract Persistence Manager for the WebCrawler 
+# Allows for writing results of a webcrawl to a CSV
+# Allows for pre-population of a webcrawl by reading from a CSV
+# Saves time by not re-visiting previously explored Webpages
+# Save data that could be used for statistical analysis 
+class WebCrawlerPersistenceManager:
+    _FILE_NAME = "recipes.csv"
+    _URL_KEY = "url"
     
-    ## TODO abstract this so that it can be used abstractly
-    # TODO I'm not quite sure how this will work if a new data point is added.
-    # Might have to read into this via Pandas documentation
     def readPreviousScrape(self) -> dict[str, list[str]]:
         try:
-            df = pd.read_csv(self.FILE_NAME)
+            df = pd.read_csv(self._FILE_NAME, index_col=0)
             
             previousScrape: dict[str, list[str]] = {}
             
             # create a url to ingredients map 
-            for label, content in  df.items():
+            for row in df.itertuples(True, "row"):
+                
                 row_data = []
                 
+                for x in range(1, len(row) - 1):
+                    if row[x] == "Y":
+                        row_data.append(df.columns.array[x])
 
-                for column in df.columns:
-                
-                    if content.get(column) == "Y":
-                        row_data.append(column)
-                    else:
-                        continue
-                    
-                previousScrape[label] = row_data
+                previousScrape[row[0]] = row_data
             
             
             return previousScrape
@@ -39,13 +38,12 @@ class DataReaderWriter:
             print(e)
             return {}
 
-        
     def writeToCsv(self, data: dict[str, list[str]]):
         
-        headerSet = {self.URL_KEY: None}
+        headerSet = {self._URL_KEY: None}
         
         # The name of all the ingredients
-        header_list: list[str] = [self.URL_KEY]
+        header_list: list[str] = [self._URL_KEY]
         
         # meta Info 
         totalItems = 0
@@ -74,7 +72,7 @@ class DataReaderWriter:
         for url, ingredient_list in data.items():
             # Initialize a dictionary, eq to the size of the headers arr, with None for all headers
             row_dict: dict[str, str] = {header: None for header in header_list}  
-            row_dict[self.URL_KEY] = url
+            row_dict[self._URL_KEY] = url
             
             for ingredient in ingredient_list:
                 sanitized_ingredient = regex.sub(r"\W", "_", ingredient)
@@ -86,14 +84,15 @@ class DataReaderWriter:
 
         # Create DataFrame
         df = pd.DataFrame(rows, columns=header_list)
-        df.set_index(self.URL_KEY, inplace=True)
+        df.set_index(self._URL_KEY, inplace=True)
         # Print the DataFrame
         print(df)
         
-        df.to_csv(self.FILE_NAME)
+        df.to_csv(self._FILE_NAME)
         
+
 class SimpleWebCrawler:
-    class RobotsParsingState:
+    class _RobotsParsingState:
         PRE_APPLICABLE = 0
         STARTED = 1
         FINISHED = 2
@@ -116,7 +115,7 @@ class SimpleWebCrawler:
         
     def setRules(self, forbidden_robots_txt_link):
         
-        state = self.RobotsParsingState.PRE_APPLICABLE
+        state = self._RobotsParsingState.PRE_APPLICABLE
         
         # for each line after User-agent: * in the robots file, 
         # add each regex after "Disallow: " to an array of forbidden websites
@@ -131,13 +130,13 @@ class SimpleWebCrawler:
         
         for line in lines:
             if (line == "User-agent: *"):
-                state = self.RobotsParsingState.STARTED
-            elif state == self.RobotsParsingState.STARTED:
+                state = self._RobotsParsingState.STARTED
+            elif state == self._RobotsParsingState.STARTED:
                 if "User-agent" in line:
-                    state = self.RobotsParsingState.FINISHED
+                    state = self._RobotsParsingState.FINISHED
                 elif line != "":
                     applicable_sites.append(line)
-            elif state == self.RobotsParsingState.FINISHED:
+            elif state == self._RobotsParsingState.FINISHED:
                 break
 
         allowed_patterns = []
@@ -199,7 +198,7 @@ class SimpleWebCrawler:
         
         ingredientsBody = soup.find_all("span", {"data-ingredient-name": "true"})
         
-        ingredientsText = [itr.get_text().replace("\n", "") for itr in ingredientsBody]
+        ingredientsText = [itr.get_text().replace("\n", "").lower() for itr in ingredientsBody]
         
         if not ingredientsText:
             print("!\t no recipe")
@@ -222,20 +221,13 @@ class SimpleWebCrawler:
 
 if __name__ == "__main__":
     baseSite = "https://www.allrecipes.com/recipe"
-    start_url = "https://www.allrecipes.com/recipes-a-z-6735880"  # Replace with your starting URL
+    start_url = "https://www.allrecipes.com/recipes-a-z-6735880" 
     robots_txt = "https://www.allrecipes.com/robots.txt"
-    # robots_txt = "https://discord.com/robots.txt"
     crawler = SimpleWebCrawler(start_url)
-    writer = DataReaderWriter()
+    writer = WebCrawlerPersistenceManager()
     try:
         crawler.recipes = writer.readPreviousScrape()
         crawler.start_crawl()
-    except KeyboardInterrupt:
-        for k, v in crawler.recipes.items():
-            print(f"{k}: ")
-            for itr in v:
-                print(f"{itr}, ")
-            print("\n")
     except Exception as e:
         print(e)
     finally:
