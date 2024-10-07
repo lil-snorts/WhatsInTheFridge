@@ -1,5 +1,5 @@
-import requests
 import re as regex
+import requests
 import pandas as pd
 from bs4 import BeautifulSoup
 
@@ -13,11 +13,11 @@ class WebCrawlerPersistenceManager:
     _FILE_NAME = "recipes.csv"
     _URL_KEY = "url"
 
-    def readPreviousScrape(self) -> dict[str, list[str]]:
+    def read_previous_scrape(self) -> dict[str, list[str]]:
         try:
             df = pd.read_csv(self._FILE_NAME, index_col=0)
 
-            previousScrape: dict[str, list[str]] = {}
+            previous_scrape: dict[str, list[str]] = {}
 
             # create a url to ingredients map
             for row in df.itertuples(True, "row"):
@@ -28,23 +28,23 @@ class WebCrawlerPersistenceManager:
                     if row[x] == "Y":
                         row_data.append(df.columns.array[x])
 
-                previousScrape[row[0]] = row_data
+                previous_scrape[row[0]] = row_data
 
-            return previousScrape
+            return previous_scrape
         except Exception as e:
             print("Likely no previous scrape detected")
             print(e)
             return {}
 
-    def writeToCsv(self, data: dict[str, list[str]]):
+    def write_to_csv(self, data: dict[str, list[str]]):
 
-        headerSet = {self._URL_KEY: None}
+        header_set = {self._URL_KEY: None}
 
         # The name of all the ingredients
         header_list: list[str] = [self._URL_KEY]
 
         # meta Info
-        totalItems = 0
+        total_items = 0
         if len(data) == 0:
             return
 
@@ -53,16 +53,16 @@ class WebCrawlerPersistenceManager:
                 if item == "":
                     continue
 
-                totalItems += 1
-                if item not in headerSet:
-                    headerSet[item] = 1
+                total_items += 1
+                if item not in header_set:
+                    header_set[item] = 1
                     header_list.append(regex.sub(r"\W", "_", item))
 
-        del headerSet
+        del header_set
 
         # this are our csv file headers
         print(header_list)
-        print(f"{len(header_list)} with {totalItems} total")
+        print(f"{len(header_list)} with {total_items} total")
 
         # Create a list of dictionaries, mapping each row to its header
         rows: list[dict[str:str]] = []
@@ -95,8 +95,17 @@ class AllRecipesWebCrawler:
         STARTED = 1
         FINISHED = 2
 
-    def __init__(self, START_URL):
-        self.START_URL = START_URL
+    def __init__(
+        self,
+        start_url,
+        target_html_tag,
+        target_html_attribute,
+        target_html_attribute_value,
+    ):
+        self.start_url = start_url
+        self.target_html_tag = target_html_tag
+        self.target_html_attribute = target_html_attribute
+        self.target_html_attribute_value = target_html_attribute_value
         self.forbidden_sites = []
         self.visited_urls = {}
         self.recipes: dict[str, list[str]] = {}
@@ -111,7 +120,7 @@ class AllRecipesWebCrawler:
             print(f"!\tError fetching {url}: {e}")
             return None
 
-    def setRules(self, forbidden_robots_txt_link):
+    def set_rules(self, forbidden_robots_txt_link):
 
         state = self._RobotsParsingState.PRE_APPLICABLE
 
@@ -195,7 +204,10 @@ class AllRecipesWebCrawler:
 
         soup = self.parse_page(html_content)
 
-        ingredients_body = soup.find_all("span", {"data-ingredient-name": "true"})
+        ingredients_body = soup.find_all(
+            self.target_html_tag,
+            {self.target_html_attribute: self.target_html_attribute_value},
+        )
 
         ingredients_text = [
             itr.get_text().replace("\n", "").lower() for itr in ingredients_body
@@ -218,23 +230,31 @@ class AllRecipesWebCrawler:
             self.crawl(link)
 
     def start_crawl(self):
-        self.crawl(self.START_URL)
+        self.crawl(self.start_url)
 
 
 if __name__ == "__main__":
     BASE_SITE = "https://www.allrecipes.com/recipe"
     START_URL = "https://www.allrecipes.com/recipes-a-z-6735880"
     ROBOTS_TXT = "https://www.allrecipes.com/robots.txt"
-
-    crawler = AllRecipesWebCrawler(START_URL)
+    TARGET_HTML_TAG = "span"
+    TARGET_HTML_TAG_ATTRIBUTE = "data-ingredient-name"
+    TARGET_HTML_TAG_ATTRIBUTE_VALUE = "true"
+    crawler = AllRecipesWebCrawler(
+        START_URL,
+        TARGET_HTML_TAG,
+        TARGET_HTML_TAG_ATTRIBUTE,
+        TARGET_HTML_TAG_ATTRIBUTE_VALUE,
+    )
     writer = WebCrawlerPersistenceManager()
     try:
-        crawler.setRules(ROBOTS_TXT)
-        crawler.recipes = writer.readPreviousScrape()
+        crawler.set_rules(ROBOTS_TXT)
+        crawler.recipes = writer.read_previous_scrape()
         crawler.start_crawl()
-
+    except KeyboardInterrupt:
+        print("KBI")
     except Exception as e:
         print(e)
 
     finally:
-        writer.writeToCsv(crawler.recipes)
+        writer.write_to_csv(crawler.recipes)
