@@ -98,11 +98,13 @@ class AllRecipesWebCrawler:
     def __init__(
         self,
         start_url,
+        base_site,
         target_html_tag,
         target_html_attribute,
         target_html_attribute_value,
     ):
         self.start_url = start_url
+        self.base_site = base_site
         self.target_html_tag = target_html_tag
         self.target_html_attribute = target_html_attribute
         self.target_html_attribute_value = target_html_attribute_value
@@ -184,7 +186,7 @@ class AllRecipesWebCrawler:
             return
 
         # if the site isn't part of the site we want to scrape
-        if BASE_SITE not in url:
+        if self.base_site not in url:
             print(f"!\tnot base site url: {url}")
             self.visited_urls[url] = ""
             return
@@ -242,6 +244,7 @@ if __name__ == "__main__":
     TARGET_HTML_TAG_ATTRIBUTE_VALUE = "true"
     crawler = AllRecipesWebCrawler(
         START_URL,
+        BASE_SITE,
         TARGET_HTML_TAG,
         TARGET_HTML_TAG_ATTRIBUTE,
         TARGET_HTML_TAG_ATTRIBUTE_VALUE,

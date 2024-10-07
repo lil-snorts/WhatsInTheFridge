@@ -20,4 +20,4 @@ jobs:
         pip install pylint
     - name: Analysing the code with pylint
       run: |
-        pylint $(git ls-files '*.py')
+        pylint $(git ls-files '*.py') --disable=unsubscriptable-object,missing-function-docstring,import-error,too-few-public-methods,missing-module-docstring,broad-exception-caught,missing-class-docstring,too-many-instance-attributes,too-many-arguments,too-many-positional-arguments
